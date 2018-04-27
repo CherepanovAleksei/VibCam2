@@ -7,9 +7,39 @@
     android:theme="@style/AppTheme"
     tools:context=".MainActivity">
 
-    <TextureView
-        android:id="@+id/previewWindow"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        tools:ignore="MissingConstraints"
+        tools:layout_editor_absoluteX="162dp"
+        tools:layout_editor_absoluteY="96dp">
+
+        <TextureView
+            android:id="@+id/previewWindow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <Button
+            android:id="@+id/recordButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@android:color/holo_green_dark"
+            android:text="Record"
+            tools:layout_editor_absoluteX="133dp"
+            tools:layout_editor_absoluteY="506dp" />
+
+        <TextView
+            android:id="@+id/fpsCounter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="false"
+            android:layout_alignParentRight="true"
+            android:background="@android:color/black"
+            android:text="fps"
+            android:textColor="@android:color/white"
+            tools:layout_editor_absoluteX="133dp"
+            tools:layout_editor_absoluteY="176dp" />
+
+    </RelativeLayout>
 
 </android.support.constraint.ConstraintLayout>
