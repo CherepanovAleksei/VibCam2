@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
@@ -73,11 +77,49 @@ class MainActivity : AppCompatActivity() {
     private val mOnVideoAvailableListener = ImageReader.OnImageAvailableListener {
         imageReader -> stabilisation(imageReader.acquireLatestImage())
     }
+    //accelerometer
+    private lateinit var mSensorManager: SensorManager
+    var mAccelerometerArr: FloatArray = FloatArray(3)
+    private var mAccelerometer: Sensor? = null
+    private val mAccelerometerListener = object: SensorEventListener {
+        override fun onSensorChanged(sensorEvent: SensorEvent) {
+            val mySensor = sensorEvent.sensor as Sensor
+            if(mySensor.type == Sensor.TYPE_ACCELEROMETER){
+                System.arraycopy(sensorEvent.values,0,mAccelerometerArr, 0, sensorEvent.values.size)
+            }
+        }
+        override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+    }
+    //gyroscope
+    var mGyroscopeArr: FloatArray = FloatArray(3)
+    private var mGyroscope:Sensor? = null
+    private val mGyroscopeListener = object:SensorEventListener{
+        override fun onSensorChanged(sensorEvent: SensorEvent) {
+            val mySensor = sensorEvent.sensor as Sensor
+            if(mySensor.type == Sensor.TYPE_GYROSCOPE){
+                System.arraycopy(sensorEvent.values,0,mGyroscopeArr, 0, sensorEvent.values.size)
+            }
+        }
+        override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+    }
+
     //Activities
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         getPermission()
+
+        mSensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+//        TODO uncomment!
+//        mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+//        mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+//        if(mGyroscope == null){
+//            Toast.makeText(this@MainActivity, "I need gyroscope",Toast.LENGTH_SHORT).show()
+//            finish()
+//        }else if(mAccelerometer == null){
+//            Toast.makeText(this@MainActivity, "I need accelerometer",Toast.LENGTH_SHORT).show()
+//            finish()
+//        }
 
         recordButton.setOnClickListener {
             if(mIsRecording){
@@ -94,6 +136,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        //gyroscope and accelerometer
+        //TODO uncomment!!!
+//        mSensorManager.registerListener(mGyroscopeListener, mGyroscope, SENSOR_DELAY_NORMAL)
+//        mSensorManager.registerListener(mAccelerometerListener, mAccelerometer, SENSOR_DELAY_NORMAL)
 
         createVideoFolder()
         if(previewWindow.isAvailable){
@@ -105,6 +151,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         if(mIsRecording) stopRecord()
+        mSensorManager.unregisterListener(mAccelerometerListener)
+        mSensorManager.unregisterListener(mGyroscopeListener)
         closeCamera()
         super.onPause()
     }
