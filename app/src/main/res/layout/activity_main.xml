@@ -40,6 +40,16 @@
             tools:layout_editor_absoluteX="133dp"
             tools:layout_editor_absoluteY="176dp" />
 
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
+            android:layout_marginBottom="47dp"
+            android:layout_marginEnd="30dp"
+            android:text="settings" />
+
     </RelativeLayout>
 
 </android.support.constraint.ConstraintLayout>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory
+        android:title="asd">
+
+        <CheckBoxPreference
+            android:background="@android:color/black"
+            android:defaultValue="false"
+            android:key="par"
+            android:summary="gg"
+            android:title="pe" />
+    </PreferenceCategory>
+</PreferenceScreen>

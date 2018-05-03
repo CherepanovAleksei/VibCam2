@@ -18,6 +18,8 @@ import android.support.v4.content.ContextCompat.checkSelfPermission
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
+import android.preference.PreferenceActivity
+import android.preference.PreferenceFragment
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRationale
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
@@ -33,16 +35,17 @@ import java.util.*
 
 class MainActivity : AppCompatActivity() {
     val TAG = "VibCam"
-    private var mSurfaceTextureListener = object: TextureView.SurfaceTextureListener{
+    private var mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
             openCamera(width, height)
 //            previewWindow.surfaceTextureListener = null
         }
-        override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture?, p1: Int, p2: Int){} //?
+
+        override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture?, p1: Int, p2: Int) {} //?
 
         override fun onSurfaceTextureUpdated(p0: SurfaceTexture?) = Unit
 
-        override fun onSurfaceTextureDestroyed(p0: SurfaceTexture?): Boolean{
+        override fun onSurfaceTextureDestroyed(p0: SurfaceTexture?): Boolean {
             return false
         }
     }
@@ -74,32 +77,34 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mVideoReader: ImageReader
     private var mVideoFileName: String? = null
     private lateinit var mVideoFolder: File
-    private val mOnVideoAvailableListener = ImageReader.OnImageAvailableListener {
-        imageReader -> stabilisation(imageReader.acquireLatestImage())
+    private val mOnVideoAvailableListener = ImageReader.OnImageAvailableListener { imageReader ->
+        stabilisation(imageReader.acquireLatestImage())
     }
     //accelerometer
     private lateinit var mSensorManager: SensorManager
     var mAccelerometerArr: FloatArray = FloatArray(3)
     private var mAccelerometer: Sensor? = null
-    private val mAccelerometerListener = object: SensorEventListener {
+    private val mAccelerometerListener = object : SensorEventListener {
         override fun onSensorChanged(sensorEvent: SensorEvent) {
             val mySensor = sensorEvent.sensor as Sensor
-            if(mySensor.type == Sensor.TYPE_ACCELEROMETER){
-                System.arraycopy(sensorEvent.values,0,mAccelerometerArr, 0, sensorEvent.values.size)
+            if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
+                System.arraycopy(sensorEvent.values, 0, mAccelerometerArr, 0, sensorEvent.values.size)
             }
         }
+
         override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
     }
     //gyroscope
     var mGyroscopeArr: FloatArray = FloatArray(3)
-    private var mGyroscope:Sensor? = null
-    private val mGyroscopeListener = object:SensorEventListener{
+    private var mGyroscope: Sensor? = null
+    private val mGyroscopeListener = object : SensorEventListener {
         override fun onSensorChanged(sensorEvent: SensorEvent) {
             val mySensor = sensorEvent.sensor as Sensor
-            if(mySensor.type == Sensor.TYPE_GYROSCOPE){
-                System.arraycopy(sensorEvent.values,0,mGyroscopeArr, 0, sensorEvent.values.size)
+            if (mySensor.type == Sensor.TYPE_GYROSCOPE) {
+                System.arraycopy(sensorEvent.values, 0, mGyroscopeArr, 0, sensorEvent.values.size)
             }
         }
+
         override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
     }
 
@@ -122,15 +127,17 @@ class MainActivity : AppCompatActivity() {
 //        }
 
         recordButton.setOnClickListener {
-            if(mIsRecording){
+            if (mIsRecording) {
                 stopRecord()
                 startPreview()
-            }else{
+            } else {
                 mIsRecording = true
                 recordButton.setBackgroundColor(android.graphics.Color.RED)
                 getPermission()
                 startRecord()
             }
+        }
+        settingsButton.setOnClickListener {
         }
     }
 
@@ -142,15 +149,15 @@ class MainActivity : AppCompatActivity() {
 //        mSensorManager.registerListener(mAccelerometerListener, mAccelerometer, SENSOR_DELAY_NORMAL)
 
         createVideoFolder()
-        if(previewWindow.isAvailable){
-            openCamera(previewWindow.width,previewWindow.height)
-        }else{
+        if (previewWindow.isAvailable) {
+            openCamera(previewWindow.width, previewWindow.height)
+        } else {
             previewWindow.surfaceTextureListener = mSurfaceTextureListener
         }
     }
 
     override fun onPause() {
-        if(mIsRecording) stopRecord()
+        if (mIsRecording) stopRecord()
         mSensorManager.unregisterListener(mAccelerometerListener)
         mSensorManager.unregisterListener(mGyroscopeListener)
         closeCamera()
@@ -163,26 +170,27 @@ class MainActivity : AppCompatActivity() {
         try {
             mVideoReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 10) //hardcode
             mVideoReader.setOnImageAvailableListener(mOnVideoAvailableListener, null)
-            for(camID in cameraManager.cameraIdList){
+            for (camID in cameraManager.cameraIdList) {
                 val cameraCharacteristics = cameraManager.getCameraCharacteristics(camID) as CameraCharacteristics
                 //определяем основая ли камера
                 if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) continue
                 mCameraId = camID
-                if(checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
+                if (checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
                     cameraManager.openCamera(camID, mCameraDeviceStateCallback, null) //mBackgroundHandler
                 }
             }
         } catch (e: CameraAccessException) {
-            Log.e(TAG,"Cannot access the camera.")
+            Log.e(TAG, "Cannot access the camera.")
             this.finish()
         } catch (e: NullPointerException) {
-            Log.e(TAG,"NullPointerException in openCamera")
+            Log.e(TAG, "NullPointerException in openCamera")
 
         } catch (e: InterruptedException) {
             throw RuntimeException("Interrupted while trying to lock camera opening.")
         }
     }
-    private fun startPreview(){
+
+    private fun startPreview() {
         val surfaceTexture: SurfaceTexture = previewWindow.surfaceTexture
         surfaceTexture.setDefaultBufferSize(640, 480)
         val previewSurface = Surface(surfaceTexture)
@@ -192,13 +200,13 @@ class MainActivity : AppCompatActivity() {
             mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             mCaptureRequestBuilder.addTarget(previewSurface)
             mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface/*,mImageReader.surface*/),
-                    object: CameraCaptureSession.StateCallback(){
+                    object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d(TAG, "onConfigured: startPreview")
                             mPreviewCaptureSession = session
                             try {
-                                mPreviewCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(),null,null)
-                            }catch (e: CameraAccessException){
+                                mPreviewCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                            } catch (e: CameraAccessException) {
                                 e.printStackTrace()
                             }
                         }
@@ -208,15 +216,15 @@ class MainActivity : AppCompatActivity() {
                         }
                     },
                     null)
-        }catch (e:CameraAccessException){
+        } catch (e: CameraAccessException) {
             e.printStackTrace()
         }
     }
 
     //fps
-    private var fps:Int = 0
+    private var fps: Int = 0
     private val frameCounter = Handler()
-    private var runnable = object :Runnable{
+    private var runnable = object : Runnable {
         override fun run() {
             fpsCounter.text = fps.toString()
             fps = 0
@@ -226,16 +234,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun startRecord() = try {
         //fps start
-        frameCounter.postDelayed(runnable,1000)
+        frameCounter.postDelayed(runnable, 1000)
 
         stopPreview()
         createVideoFileName()
 
-        val surfaceTexture:SurfaceTexture = previewWindow.surfaceTexture.apply {
-            setDefaultBufferSize(640,480) //hardcode
+        val surfaceTexture: SurfaceTexture = previewWindow.surfaceTexture.apply {
+            setDefaultBufferSize(640, 480) //hardcode
         }
         val previewSurface = Surface(surfaceTexture)
-        val recordSurface:Surface = mVideoReader.surface
+        val recordSurface: Surface = mVideoReader.surface
 
         mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
         mCaptureRequestBuilder.addTarget(previewSurface)
@@ -243,18 +251,18 @@ class MainActivity : AppCompatActivity() {
 
         mCameraDevice!!.createCaptureSession(
                 Arrays.asList(recordSurface, previewSurface),
-                object: CameraCaptureSession.StateCallback(){
+                object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
                         mRecordCaptureSession = cameraCaptureSession
                         try {
-                            mRecordCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(),null,null)
-                        }catch (e:CameraAccessException){
+                            mRecordCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                        } catch (e: CameraAccessException) {
                             e.printStackTrace()
                         }
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession?) {
-                        Log.d(TAG,"onConfigureFailed in startRecord()")
+                        Log.d(TAG, "onConfigureFailed in startRecord()")
                     }
                 }, null)
     } catch (e: CameraAccessException) {
@@ -264,21 +272,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createVideoFolder() {
-        val videoFile:File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val videoFile: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         mVideoFolder = File(videoFile, "VibCam")
-        if(!mVideoFolder.exists()){
+        if (!mVideoFolder.exists()) {
             mVideoFolder.mkdirs()
         }
     }
 
     //TODO
     @SuppressLint("SimpleDateFormat")
-    fun createVideoFileName(): File {
+    private fun createVideoFileName() {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val prepend = "VIDEO_$timestamp"
         val videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
         mVideoFileName = videoFile.absolutePath
-        return videoFile //зачем?
     }
 
     //close
@@ -287,7 +294,8 @@ class MainActivity : AppCompatActivity() {
         mPreviewCaptureSession?.close()
         mPreviewCaptureSession = null
     }
-    private fun stopRecord(){
+
+    private fun stopRecord() {
         //fps stop
         frameCounter.removeCallbacks(runnable)
         fpsCounter.text = "fps"
@@ -298,34 +306,36 @@ class MainActivity : AppCompatActivity() {
         mPreviewCaptureSession?.close()
         mRecordCaptureSession = null
     }
-    private fun closeCamera(){
-        try{
-            if(mIsRecording) stopRecord()
+
+    private fun closeCamera() {
+        try {
+            if (mIsRecording) stopRecord()
             stopPreview()
             mCameraDevice?.close()
             mCameraDevice = null
-        }catch (e:InterruptedException) {
+        } catch (e: InterruptedException) {
             throw RuntimeException("Can't close camera", e)
         }
     }
 
     //permissions
-    private fun getPermission(){
-        if(checkSelfPermission(this@MainActivity, CAMERA)
-                != PackageManager.PERMISSION_GRANTED){
-            if(shouldShowRequestPermissionRationale(this@MainActivity, CAMERA)){
-                makeText(this@MainActivity,"I can't work without Camera!", LENGTH_SHORT).show()
+    private fun getPermission() {
+        if (checkSelfPermission(this@MainActivity, CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (shouldShowRequestPermissionRationale(this@MainActivity, CAMERA)) {
+                makeText(this@MainActivity, "I can't work without Camera!", LENGTH_SHORT).show()
             }
-            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA),CAMERA_PERMISSION_REQUEST)
+            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA), CAMERA_PERMISSION_REQUEST)
         }
-        if(checkSelfPermission(this@MainActivity, WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED){
-            if(shouldShowRequestPermissionRationale(this@MainActivity, WRITE_EXTERNAL_STORAGE)){
-                makeText(this@MainActivity,"I can't work without saving!", LENGTH_SHORT).show()
+        if (checkSelfPermission(this@MainActivity, WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (shouldShowRequestPermissionRationale(this@MainActivity, WRITE_EXTERNAL_STORAGE)) {
+                makeText(this@MainActivity, "I can't work without saving!", LENGTH_SHORT).show()
             }
-            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(WRITE_EXTERNAL_STORAGE),STORAGE_PERMISSION_REQUEST)
+            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(WRITE_EXTERNAL_STORAGE), STORAGE_PERMISSION_REQUEST)
         }
     }
+
     override fun onRequestPermissionsResult(
             requestCode: Int,
             permissions: Array<String>,
@@ -333,32 +343,31 @@ class MainActivity : AppCompatActivity() {
     ) {
         when (requestCode) {
             CAMERA_PERMISSION_REQUEST -> {
-                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED){
+                if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
 
-                }else{
-                    makeText(this@MainActivity,"I can't work without Camera!", LENGTH_SHORT).show()
+                } else {
+                    makeText(this@MainActivity, "I can't work without Camera!", LENGTH_SHORT).show()
                     this@MainActivity.finish()
                 }
                 return
             }
             STORAGE_PERMISSION_REQUEST -> {
-                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED){
+                if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
 
-                }else{
-                    makeText(this@MainActivity,"I can't work without saving!", LENGTH_SHORT).show()
+                } else {
+                    makeText(this@MainActivity, "I can't work without saving!", LENGTH_SHORT).show()
                     this@MainActivity.finish()
                 }
                 return
             }
         }
     }
+
     //stabilisation
-    fun stabilisation(image: Image?){
+    fun stabilisation(image: Image?) {
         if (null == image) return
         fps++
         image.close()
         return
     }
-
-
 }
