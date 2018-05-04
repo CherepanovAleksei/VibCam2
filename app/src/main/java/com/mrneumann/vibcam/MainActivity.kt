@@ -15,6 +15,7 @@ import android.hardware.SensorManager.SENSOR_DELAY_NORMAL
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
+import android.media.ImageReader.OnImageAvailableListener
 import android.support.v7.app.AppCompatActivity
 import android.support.v4.content.ContextCompat.checkSelfPermission
 import android.os.Bundle
@@ -36,9 +37,10 @@ import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-
 class MainActivity : AppCompatActivity() {
+
     val TAG = "VibCam"
+    //listeners
     private var mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
             openCamera(width, height)
@@ -70,22 +72,36 @@ class MainActivity : AppCompatActivity() {
             startPreview()
         }
     }
-    private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
+    private val mOnVideoAvailableListener = OnImageAvailableListener { imageReader ->
+        stabilisation(imageReader.acquireLatestImage())
+    }
+    //camera
     private var mPreviewCaptureSession: CameraCaptureSession? = null
     private var mCameraDevice: CameraDevice? = null
     private lateinit var mCameraId: String
+    //permission
     private var CAMERA_PERMISSION_REQUEST = 0
     private var STORAGE_PERMISSION_REQUEST = 0
+    //record
     private var mIsRecording = false
     private var mRecordCaptureSession: CameraCaptureSession? = null
+    private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
     private lateinit var mVideoReader: ImageReader
     private var mVideoFileName: String? = null
     private lateinit var mVideoFolder: File
+    //preferences flags
     private var fpsCounterFlag:Boolean = false
     private var gyroscopeFlag = false
     private var accelerometerFlag = false
-    private val mOnVideoAvailableListener = ImageReader.OnImageAvailableListener { imageReader ->
-        stabilisation(imageReader.acquireLatestImage())
+    //fps
+    private var fps: Int = 0
+    private val frameCounter = Handler()
+    private var runnable = object : Runnable {
+        override fun run() {
+            fpsCounter.text = fps.toString()
+            fps = 0
+            frameCounter.postDelayed(this, 1000)
+        }
     }
     //accelerometer
     private lateinit var mSensorManager: SensorManager
@@ -101,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
         getPermission()
 
         recordButton.setOnClickListener {
@@ -126,62 +143,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
     }
-private fun updatePreferences(){
-    //fps
-    fpsCounterFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("fps_counter_switch", true)
-    if(fpsCounterFlag){
-        fpsCounter.text = getString(R.string.fps_name)
-    } else{
-        fpsCounter.text = ""
-    }
 
-    //accelerometer and gyroscope
-    mSensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-
-    gyroscopeFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("gyroscope_switch", false)
-    if(gyroscopeFlag){
-        mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-        if(mGyroscope == null) {
-            Toast.makeText(this@MainActivity, "I need gyroscope", Toast.LENGTH_SHORT).show()
-            finish()
-        }
-        mGyroscopeListener = object : SensorEventListener {
-            override fun onSensorChanged(sensorEvent: SensorEvent) {
-                val mySensor = sensorEvent.sensor as Sensor
-                if (mySensor.type == Sensor.TYPE_GYROSCOPE) {
-                    System.arraycopy(sensorEvent.values, 0, mGyroscopeArr, 0, sensorEvent.values.size)
-                }
-            }
-            override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
-        }
-        mSensorManager.registerListener(mGyroscopeListener, mGyroscope, SENSOR_DELAY_NORMAL)
-    }else{
-        if(mGyroscopeListener != null) mSensorManager.unregisterListener(mGyroscopeListener)
-        mGyroscopeListener = null
-    }
-    accelerometerFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("accelerometer_switch",false)
-    if(accelerometerFlag){
-        mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        if(mAccelerometer == null){
-            Toast.makeText(this@MainActivity, "I need accelerometer",Toast.LENGTH_SHORT).show()
-            finish()
-        }
-        mAccelerometerListener = object : SensorEventListener {
-            override fun onSensorChanged(sensorEvent: SensorEvent) {
-                val mySensor = sensorEvent.sensor as Sensor
-                if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
-                    System.arraycopy(sensorEvent.values, 0, mAccelerometerArr, 0, sensorEvent.values.size)
-                }
-            }
-
-            override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
-        }
-        mSensorManager.registerListener(mAccelerometerListener, mAccelerometer, SENSOR_DELAY_NORMAL)
-    } else{
-        if(mAccelerometerListener != null) mSensorManager.unregisterListener(mAccelerometerListener)
-        mAccelerometerListener = null
-    }
-}
     override fun onResume() {
         super.onResume()
         updatePreferences()
@@ -202,8 +164,8 @@ private fun updatePreferences(){
         super.onPause()
     }
 
+    //setup camera
     private fun openCamera(width: Int, height: Int) {
-
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             mVideoReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 10) //hardcode
@@ -259,19 +221,9 @@ private fun updatePreferences(){
         }
     }
 
-    //fps
-    private var fps: Int = 0
-    private val frameCounter = Handler()
-    private var runnable = object : Runnable {
-        override fun run() {
-            fpsCounter.text = fps.toString()
-            fps = 0
-            frameCounter.postDelayed(this, 1000)
-        }
-    }
-
+    //record
     private fun startRecord() = try {
-        //fps start
+        //fps count start
         if(fpsCounterFlag) {
             frameCounter.postDelayed(runnable, 1000)
         }
@@ -401,6 +353,64 @@ private fun updatePreferences(){
                 }
                 return
             }
+        }
+    }
+
+    //preferences
+    private fun updatePreferences(){
+        //fps
+        fpsCounterFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("fps_counter_switch", true)
+        if(fpsCounterFlag){
+            fpsCounter.text = getString(R.string.fps_name)
+        } else{
+            fpsCounter.text = ""
+        }
+
+        //accelerometer and gyroscope
+        mSensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+        gyroscopeFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("gyroscope_switch", false)
+        if(gyroscopeFlag){
+            mGyroscope = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            if(mGyroscope == null) {
+                Toast.makeText(this@MainActivity, "I need gyroscope", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            mGyroscopeListener = object : SensorEventListener {
+                override fun onSensorChanged(sensorEvent: SensorEvent) {
+                    val mySensor = sensorEvent.sensor as Sensor
+                    if (mySensor.type == Sensor.TYPE_GYROSCOPE) {
+                        System.arraycopy(sensorEvent.values, 0, mGyroscopeArr, 0, sensorEvent.values.size)
+                    }
+                }
+                override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+            }
+            mSensorManager.registerListener(mGyroscopeListener, mGyroscope, SENSOR_DELAY_NORMAL)
+        }else{
+            if(mGyroscopeListener != null) mSensorManager.unregisterListener(mGyroscopeListener)
+            mGyroscopeListener = null
+        }
+        accelerometerFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("accelerometer_switch",false)
+        if(accelerometerFlag){
+            mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            if(mAccelerometer == null){
+                Toast.makeText(this@MainActivity, "I need accelerometer",Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            mAccelerometerListener = object : SensorEventListener {
+                override fun onSensorChanged(sensorEvent: SensorEvent) {
+                    val mySensor = sensorEvent.sensor as Sensor
+                    if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
+                        System.arraycopy(sensorEvent.values, 0, mAccelerometerArr, 0, sensorEvent.values.size)
+                    }
+                }
+
+                override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+            }
+            mSensorManager.registerListener(mAccelerometerListener, mAccelerometer, SENSOR_DELAY_NORMAL)
+        } else{
+            if(mAccelerometerListener != null) mSensorManager.unregisterListener(mAccelerometerListener)
+            mAccelerometerListener = null
         }
     }
 
