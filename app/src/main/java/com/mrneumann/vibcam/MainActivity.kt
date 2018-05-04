@@ -3,6 +3,7 @@ package com.mrneumann.vibcam
 import android.Manifest.permission.*
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
@@ -20,12 +21,14 @@ import android.os.Environment
 import android.os.Handler
 import android.preference.PreferenceActivity
 import android.preference.PreferenceFragment
+import android.preference.PreferenceManager
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRationale
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
+import android.widget.Toast
 import android.widget.Toast.*
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
@@ -77,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mVideoReader: ImageReader
     private var mVideoFileName: String? = null
     private lateinit var mVideoFolder: File
+    private var fpsCounterFlag:Boolean = false
     private val mOnVideoAvailableListener = ImageReader.OnImageAvailableListener { imageReader ->
         stabilisation(imageReader.acquireLatestImage())
     }
@@ -138,11 +142,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
         settingsButton.setOnClickListener {
+            val intent: Intent = Intent(this@MainActivity,SettingsActivity::class.java).apply {
+                putExtra(
+                        PreferenceActivity.EXTRA_SHOW_FRAGMENT,
+                        SettingsActivity.GeneralPreferenceFragment::class.java.name
+                )
+                putExtra(PreferenceActivity.EXTRA_NO_HEADERS,true)
+
+            }
+            startActivity(intent)
         }
     }
 
     override fun onResume() {
         super.onResume()
+        fpsCounterFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("fps_counter_switch", true)
+        if(fpsCounterFlag){
+            fpsCounter.text = getString(R.string.fps_name)
+        } else{
+            fpsCounter.text = ""
+        }
         //gyroscope and accelerometer
         //TODO uncomment!!!
 //        mSensorManager.registerListener(mGyroscopeListener, mGyroscope, SENSOR_DELAY_NORMAL)
@@ -234,8 +253,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun startRecord() = try {
         //fps start
-        frameCounter.postDelayed(runnable, 1000)
-
+        if(fpsCounterFlag) {
+            frameCounter.postDelayed(runnable, 1000)
+        }
         stopPreview()
         createVideoFileName()
 
@@ -297,8 +317,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopRecord() {
         //fps stop
-        frameCounter.removeCallbacks(runnable)
-        fpsCounter.text = "fps"
+        if(fpsCounterFlag) {
+            frameCounter.removeCallbacks(runnable)
+            fpsCounter.text = getString(R.string.fps_name)
+        }
 
         mIsRecording = false
         recordButton.setBackgroundColor(android.graphics.Color.GREEN)
@@ -366,7 +388,9 @@ class MainActivity : AppCompatActivity() {
     //stabilisation
     fun stabilisation(image: Image?) {
         if (null == image) return
-        fps++
+        if(fpsCounterFlag) {
+            fps++
+        }
         image.close()
         return
     }

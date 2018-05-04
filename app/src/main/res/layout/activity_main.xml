@@ -35,7 +35,7 @@
             android:layout_alignParentBottom="false"
             android:layout_alignParentRight="true"
             android:background="@android:color/black"
-            android:text="fps"
+            android:text="@string/fps_name"
             android:textColor="@android:color/white"
             tools:layout_editor_absoluteX="133dp"
             tools:layout_editor_absoluteY="176dp" />
@@ -48,7 +48,7 @@
             android:layout_alignParentEnd="true"
             android:layout_marginBottom="47dp"
             android:layout_marginEnd="30dp"
-            android:text="settings" />
+            android:text="@string/settings" />
 
     </RelativeLayout>
 
