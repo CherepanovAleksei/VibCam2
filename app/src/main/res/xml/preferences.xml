@@ -1,19 +1,15 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
     <SwitchPreference
-        android:defaultValue="true"
+        android:defaultValue="false"
         android:key="gyroscope_switch"
         android:title="Gyroscope" />
     <SwitchPreference
-        android:defaultValue="true"
+        android:defaultValue="false"
         android:key="accelerometer_switch"
         android:title="Accelerometer" />
     <SwitchPreference
-        android:defaultValue="true"
-        android:key="autofocus_switch"
-        android:title="Autofocus" />
-    <SwitchPreference
-        android:defaultValue="true"
+        android:defaultValue="false"
         android:key="fps_counter_switch"
         android:title="FPS counter" />
     <!-- NOTE: Hide buttons to simplify the UI. Users can touch outside the dialog to

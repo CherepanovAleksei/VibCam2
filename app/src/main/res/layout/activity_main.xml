@@ -35,7 +35,7 @@
             android:layout_alignParentBottom="false"
             android:layout_alignParentRight="true"
             android:background="@android:color/black"
-            android:text="@string/fps_name"
+            android:text=""
             android:textColor="@android:color/white"
             tools:layout_editor_absoluteX="133dp"
             tools:layout_editor_absoluteY="176dp" />
