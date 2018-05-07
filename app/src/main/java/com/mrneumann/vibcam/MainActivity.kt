@@ -5,9 +5,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.ImageFormat
+import android.content.res.Configuration
+import android.graphics.*
 import android.graphics.ImageFormat.YUV_420_888
-import android.graphics.SurfaceTexture
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -20,7 +20,6 @@ import android.media.Image
 import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
 import android.media.ImageReader.newInstance
-import android.media.MediaRecorder
 import android.support.v7.app.AppCompatActivity
 import android.support.v4.content.ContextCompat.checkSelfPermission
 import android.os.Bundle
@@ -49,11 +48,13 @@ class MainActivity : AppCompatActivity() {
     //listeners
     private var mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
-            openCamera()
+            openCamera(width, height)
 //            previewWindow.surfaceTextureListener = null
         }
 
-        override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture?, p1: Int, p2: Int) {} //?
+        override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture?, width: Int, height: Int) {
+            configureTransform(width,height)
+        }
 
         override fun onSurfaceTextureUpdated(p0: SurfaceTexture?) = Unit
 
@@ -76,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         override fun onOpened(cameraDevice: CameraDevice?) {
             mCameraDevice = cameraDevice
             startPreview()
+            configureTransform(previewWindow.width,previewWindow.height)
         }
     }
     private val mOnVideoAvailableListener = OnImageAvailableListener { imageReader ->
@@ -86,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     private var mCameraDevice: CameraDevice? = null
     private lateinit var mCameraId: String
     private var lensFacing = LENS_FACING_BACK
+    private lateinit var previewWindow: AutoFitTextureView
     //permission
     private var CAMERA_PERMISSION_REQUEST = 0
     private var STORAGE_PERMISSION_REQUEST = 0
@@ -96,6 +99,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mVideoReader: ImageReader
     var mVideoFileName: String? = null
     lateinit var mVideoFolder: File
+    //resolution and sizes
+    private var sensorOrientation = 0
+    lateinit var previewSize:Size
+    lateinit var videoSize:Size
     //preferences flags
     private var fpsCounterFlag = false
     private var gyroscopeFlag = false
@@ -128,6 +135,7 @@ class MainActivity : AppCompatActivity() {
 
         getPermission()
 
+        previewWindow = texture.findViewById(R.id.texture)
         recordButton.setOnClickListener {
             if (mIsRecording) {
                 stopRecord()
@@ -157,7 +165,7 @@ class MainActivity : AppCompatActivity() {
             if(lensFacing == LENS_FACING_BACK) lensFacing = LENS_FACING_FRONT
             else lensFacing = LENS_FACING_BACK
             closeCamera()
-            openCamera()
+            openCamera(previewWindow.width, previewWindow.height)
         }
         galleryButton.setOnClickListener{
 
@@ -170,7 +178,7 @@ class MainActivity : AppCompatActivity() {
 
         createVideoFolder()
         if (previewWindow.isAvailable) {
-            openCamera()
+            openCamera(previewWindow.width, previewWindow.height)
         } else {
             previewWindow.surfaceTextureListener = mSurfaceTextureListener
         }
@@ -184,33 +192,46 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
-//    private fun preview(arr:Array<Size>):Pair<Int,Int>{
-//
-//    }
     //setup camera
-    private fun openCamera() {
+    private fun openCamera(width: Int, height: Int) {
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             for (camID in cameraManager.cameraIdList) {
                 val cameraCharacteristics = cameraManager.getCameraCharacteristics(camID) as CameraCharacteristics
-                //определяем основая ли камера
+                //choose camera
                 if (cameraCharacteristics.get(LENS_FACING) != lensFacing) continue
                 mCameraId = camID
 
                 //resolution
-                val sizes = cameraCharacteristics
+                sensorOrientation = cameraCharacteristics.get(SENSOR_ORIENTATION)
+                val map = cameraCharacteristics
                         .get(SCALER_STREAM_CONFIGURATION_MAP)
-                        .getOutputSizes(SurfaceTexture::class.java)
+                videoSize = videoResolution(map.getOutputSizes(ImageReader::class.java))
 
                 mVideoReader = newInstance(
-                        videoResolution(sizes).first,
-                        videoResolution(sizes).second,
+                        videoSize.width,
+                        videoSize.height,
                         YUV_420_888,
                         10
                 ).apply {
                     setOnImageAvailableListener(mOnVideoAvailableListener, null)
                 }
                 Toast.makeText(this,mVideoReader.width.toString()+"x"+mVideoReader.height.toString(), LENGTH_SHORT).show()
+
+                previewSize = chooseOptimalSize(
+                        map.getOutputSizes(SurfaceTexture::class.java),
+                        width,
+                        height,
+                        videoSize
+                )
+
+
+                if(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE){
+                    previewWindow.setAspectRatio(previewSize.width,previewSize.height)
+                }else{
+                    previewWindow.setAspectRatio(previewSize.height,previewSize.width)
+                }
+                configureTransform(width,height)
 
                 if (checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
                     cameraManager.openCamera(camID, mCameraDeviceStateCallback, null) //mBackgroundHandler
@@ -268,14 +289,17 @@ class MainActivity : AppCompatActivity() {
         createVideoFileName()
 
         val surfaceTexture: SurfaceTexture = previewWindow.surfaceTexture.apply {
-            setDefaultBufferSize(640, 480) //hardcode
+            setDefaultBufferSize(previewSize.width,previewSize.height)
         }
         val previewSurface = Surface(surfaceTexture)
         val recordSurface: Surface = mVideoReader.surface
 
-        mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
-        mCaptureRequestBuilder.addTarget(previewSurface)
-        mCaptureRequestBuilder.addTarget(recordSurface)
+        mCaptureRequestBuilder = mCameraDevice!!
+                .createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
+                .apply {
+                    addTarget(previewSurface)
+                    addTarget(recordSurface)
+                }
 
         mCameraDevice!!.createCaptureSession(
                 Arrays.asList(recordSurface, previewSurface),
@@ -300,23 +324,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     //setup
-    private fun videoResolution(arr:Array<Size>):Pair<Int,Int>{
-        when(resolutionPreference){
-            1 -> {
-                for (item in arr) if(item.width / item.height == 4/3) return Pair(item.width, item.height)
-                return Pair(960,720)
-            }
-            0 -> {
-                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 720) return Pair(item.width, item.height)
-                return Pair(640,480)
-            }
-            else -> {
-                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 480) return Pair(item.width, item.height)
-                return Pair(480,360)
-            }
-        }
-    }
-
     fun createVideoFolder() {
         val videoFile: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         mVideoFolder = File(videoFile, "VibCam")
@@ -335,13 +342,76 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun makeInvisible(){
+        galleryButton.visibility = View.INVISIBLE
         settingsButton.visibility = View.INVISIBLE
         lensFacingButton.visibility = View.INVISIBLE
     }
 
     private fun makeVisible(){
+        galleryButton.visibility = View.VISIBLE
         settingsButton.visibility = View.VISIBLE
         lensFacingButton.visibility = View.VISIBLE
+    }
+
+    //resolution and sizes
+    private fun configureTransform(viewWidth: Int, viewHeight: Int) {
+        val rotation = this.windowManager.defaultDisplay.rotation
+        val matrix = Matrix()
+        val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
+        val bufferRect = RectF(0f, 0f, previewSize.height.toFloat(), previewSize.width.toFloat())
+        val centerX = viewRect.centerX()
+        val centerY = viewRect.centerY()
+
+        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY())
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL)
+            val scale = Math.max(
+                    viewHeight.toFloat() / previewSize.height,
+                    viewWidth.toFloat() / previewSize.width)
+            with(matrix) {
+                postScale(scale, scale, centerX, centerY)
+                postRotate((90 * (rotation - 2)).toFloat(), centerX, centerY)
+            }
+        }
+        previewWindow.setTransform(matrix)
+    }
+
+    private fun chooseOptimalSize(
+            choices: Array<Size>,
+            width: Int,
+            height: Int,
+            aspectRatio: Size
+    ): Size {
+
+        // Collect the supported resolutions that are at least as big as the preview Surface
+        val w = aspectRatio.width
+        val h = aspectRatio.height
+        val bigEnough = choices.filter {
+            it.height == it.width * h / w && it.width >= width && it.height >= height }
+
+        // Pick the smallest of those, assuming we found any
+        return if (bigEnough.isNotEmpty()) {
+            Collections.min(bigEnough, CompareSizesByArea())
+        } else {
+            choices[0]
+        }
+    }
+
+    private fun videoResolution(arr:Array<Size>):Size{
+        when(resolutionPreference){
+            1 -> {
+                for (item in arr) if(item.width / item.height == 4/3) return item
+                return Size(960,720)
+            }
+            0 -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 720) return item
+                return Size(640,480)
+            }
+            else -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 480) return item
+                return Size(480,360)
+            }
+        }
     }
 
     //close
