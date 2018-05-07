@@ -168,7 +168,10 @@ class MainActivity : AppCompatActivity() {
             openCamera(previewWindow.width, previewWindow.height)
         }
         galleryButton.setOnClickListener{
-
+            startActivity(Intent(Intent.ACTION_VIEW).apply {
+                type = "image/*"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            })
         }
     }
 
