@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.graphics.ImageFormat.YUV_420_888
 import android.graphics.SurfaceTexture
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -13,23 +14,28 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.hardware.SensorManager.SENSOR_DELAY_NORMAL
 import android.hardware.camera2.*
+import android.hardware.camera2.CameraCharacteristics.*
+import android.hardware.camera2.CameraMetadata.LENS_FACING_BACK
 import android.media.Image
 import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
+import android.media.ImageReader.newInstance
+import android.media.MediaRecorder
 import android.support.v7.app.AppCompatActivity
 import android.support.v4.content.ContextCompat.checkSelfPermission
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.preference.PreferenceActivity
-import android.preference.PreferenceFragment
 import android.preference.PreferenceManager
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRationale
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.util.Log
+import android.util.Size
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import android.widget.Toast
 import android.widget.Toast.*
 import kotlinx.android.synthetic.main.activity_main.*
@@ -43,7 +49,7 @@ class MainActivity : AppCompatActivity() {
     //listeners
     private var mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
-            openCamera(width, height)
+            openCamera()
 //            previewWindow.surfaceTextureListener = null
         }
 
@@ -79,6 +85,7 @@ class MainActivity : AppCompatActivity() {
     private var mPreviewCaptureSession: CameraCaptureSession? = null
     private var mCameraDevice: CameraDevice? = null
     private lateinit var mCameraId: String
+    private var lensFacing = LENS_FACING_BACK
     //permission
     private var CAMERA_PERMISSION_REQUEST = 0
     private var STORAGE_PERMISSION_REQUEST = 0
@@ -87,12 +94,13 @@ class MainActivity : AppCompatActivity() {
     private var mRecordCaptureSession: CameraCaptureSession? = null
     private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
     private lateinit var mVideoReader: ImageReader
-    private var mVideoFileName: String? = null
-    private lateinit var mVideoFolder: File
+    var mVideoFileName: String? = null
+    lateinit var mVideoFolder: File
     //preferences flags
-    private var fpsCounterFlag:Boolean = false
+    private var fpsCounterFlag = false
     private var gyroscopeFlag = false
     private var accelerometerFlag = false
+    private var resolutionPreference = -1
     //fps
     private var fps: Int = 0
     private val frameCounter = Handler()
@@ -123,15 +131,18 @@ class MainActivity : AppCompatActivity() {
         recordButton.setOnClickListener {
             if (mIsRecording) {
                 stopRecord()
+                makeVisible()
                 startPreview()
             } else {
                 mIsRecording = true
+                makeInvisible()
                 recordButton.setBackgroundColor(android.graphics.Color.RED)
                 getPermission()
                 startRecord()
             }
         }
         settingsButton.setOnClickListener {
+            closeCamera()
             val intent: Intent = Intent(this@MainActivity,SettingsActivity::class.java).apply {
                 putExtra(
                         PreferenceActivity.EXTRA_SHOW_FRAGMENT,
@@ -142,6 +153,15 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(intent)
         }
+        lensFacingButton.setOnClickListener {
+            if(lensFacing == LENS_FACING_BACK) lensFacing = LENS_FACING_FRONT
+            else lensFacing = LENS_FACING_BACK
+            closeCamera()
+            openCamera()
+        }
+        galleryButton.setOnClickListener{
+
+        }
     }
 
     override fun onResume() {
@@ -150,7 +170,7 @@ class MainActivity : AppCompatActivity() {
 
         createVideoFolder()
         if (previewWindow.isAvailable) {
-            openCamera(previewWindow.width, previewWindow.height)
+            openCamera()
         } else {
             previewWindow.surfaceTextureListener = mSurfaceTextureListener
         }
@@ -164,17 +184,34 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+//    private fun preview(arr:Array<Size>):Pair<Int,Int>{
+//
+//    }
     //setup camera
-    private fun openCamera(width: Int, height: Int) {
+    private fun openCamera() {
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
-            mVideoReader = ImageReader.newInstance(640, 480, ImageFormat.YUV_420_888, 10) //hardcode
-            mVideoReader.setOnImageAvailableListener(mOnVideoAvailableListener, null)
             for (camID in cameraManager.cameraIdList) {
                 val cameraCharacteristics = cameraManager.getCameraCharacteristics(camID) as CameraCharacteristics
                 //определяем основая ли камера
-                if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) continue
+                if (cameraCharacteristics.get(LENS_FACING) != lensFacing) continue
                 mCameraId = camID
+
+                //resolution
+                val sizes = cameraCharacteristics
+                        .get(SCALER_STREAM_CONFIGURATION_MAP)
+                        .getOutputSizes(SurfaceTexture::class.java)
+
+                mVideoReader = newInstance(
+                        videoResolution(sizes).first,
+                        videoResolution(sizes).second,
+                        YUV_420_888,
+                        10
+                ).apply {
+                    setOnImageAvailableListener(mOnVideoAvailableListener, null)
+                }
+                Toast.makeText(this,mVideoReader.width.toString()+"x"+mVideoReader.height.toString(), LENGTH_SHORT).show()
+
                 if (checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
                     cameraManager.openCamera(camID, mCameraDeviceStateCallback, null) //mBackgroundHandler
                 }
@@ -262,7 +299,25 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, e.toString())
     }
 
-    private fun createVideoFolder() {
+    //setup
+    private fun videoResolution(arr:Array<Size>):Pair<Int,Int>{
+        when(resolutionPreference){
+            1 -> {
+                for (item in arr) if(item.width / item.height == 4/3) return Pair(item.width, item.height)
+                return Pair(960,720)
+            }
+            0 -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 720) return Pair(item.width, item.height)
+                return Pair(640,480)
+            }
+            else -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 480) return Pair(item.width, item.height)
+                return Pair(480,360)
+            }
+        }
+    }
+
+    fun createVideoFolder() {
         val videoFile: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         mVideoFolder = File(videoFile, "VibCam")
         if (!mVideoFolder.exists()) {
@@ -272,11 +327,21 @@ class MainActivity : AppCompatActivity() {
 
     //TODO
     @SuppressLint("SimpleDateFormat")
-    private fun createVideoFileName() {
+    fun createVideoFileName() {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val prepend = "VIDEO_$timestamp"
         val videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder)
         mVideoFileName = videoFile.absolutePath
+    }
+
+    private fun makeInvisible(){
+        settingsButton.visibility = View.INVISIBLE
+        lensFacingButton.visibility = View.INVISIBLE
+    }
+
+    private fun makeVisible(){
+        settingsButton.visibility = View.VISIBLE
+        lensFacingButton.visibility = View.VISIBLE
     }
 
     //close
@@ -306,6 +371,7 @@ class MainActivity : AppCompatActivity() {
             stopPreview()
             mCameraDevice?.close()
             mCameraDevice = null
+            mVideoReader.close()
         } catch (e: InterruptedException) {
             throw RuntimeException("Can't close camera", e)
         }
@@ -358,8 +424,15 @@ class MainActivity : AppCompatActivity() {
 
     //preferences
     private fun updatePreferences(){
+        //resolution
+        resolutionPreference = PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .getString("resolution_list", "-1")
+                .toInt()
         //fps
-        fpsCounterFlag = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("fps_counter_switch", true)
+        fpsCounterFlag = PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .getBoolean("fps_counter_switch", true)
         if(fpsCounterFlag){
             fpsCounter.text = getString(R.string.fps_name)
         } else{

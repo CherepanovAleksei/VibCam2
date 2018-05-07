@@ -1,9 +1,18 @@
 package com.mrneumann.vibcam
 
 import android.app.Activity
+import android.os.Environment
 import org.junit.Test
 
 import org.junit.Assert.*
+import org.junit.runner.RunWith
+import org.mockito.Mock
+import org.mockito.Mockito
+import org.mockito.Mockito.mock
+import org.mockito.junit.MockitoJUnit
+import org.mockito.runners.MockitoJUnitRunner
+import java.io.File
+import java.net.URI
 
 /**
  * Example local unit test, which will execute on the development machine (host).
@@ -11,6 +20,8 @@ import org.junit.Assert.*
  * See [testing documentation](http://d.android.com/tools/testing).
  */
 class ExampleUnitTest {
+
+
     @Test
     fun addition_isCorrect() {
         assertEquals(4, 2 + 2)
@@ -18,5 +29,10 @@ class ExampleUnitTest {
 
     @Test
     fun checkFileName(){
+
+        Mockito.`when`(MainActivity().mVideoFolder).thenReturn(File.createTempFile("asd",".tmp"))
+
+        MainActivity().createVideoFileName()
+        print(MainActivity().mVideoFileName)
     }
 }
