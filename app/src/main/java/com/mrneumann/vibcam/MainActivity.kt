@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity() {
     private var mIsRecording = false
     private var mRecordCaptureSession: CameraCaptureSession? = null
     private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
-    private lateinit var mVideoReader: ImageReader
+    private var mVideoReader: ImageReader? = null
     var mVideoFileName: String? = null
     lateinit var mVideoFolder: File
     //resolution and sizes
@@ -106,7 +106,7 @@ class MainActivity : AppCompatActivity() {
     private var fpsCounterFlag = false
     private var gyroscopeFlag = false
     private var accelerometerFlag = false
-    private var resolutionPreference = -1
+    private var resolutionPreference = 0
     //fps
     private var fps: Int = 0
     private val frameCounter = Handler()
@@ -219,7 +219,7 @@ class MainActivity : AppCompatActivity() {
                 ).apply {
                     setOnImageAvailableListener(mOnVideoAvailableListener, null)
                 }
-                Toast.makeText(this,mVideoReader.width.toString()+"x"+mVideoReader.height.toString(), LENGTH_SHORT).show()
+                Toast.makeText(this,mVideoReader!!.width.toString()+"x"+mVideoReader!!.height.toString(), LENGTH_SHORT).show()
 
                 previewSize = chooseOptimalSize(
                         map.getOutputSizes(SurfaceTexture::class.java),
@@ -253,7 +253,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startPreview() {
         val surfaceTexture: SurfaceTexture = previewWindow.surfaceTexture
-        surfaceTexture.setDefaultBufferSize(640, 480)
+        surfaceTexture.setDefaultBufferSize(previewSize.width, previewSize.height)
         val previewSurface = Surface(surfaceTexture)
 
         try {
@@ -295,7 +295,7 @@ class MainActivity : AppCompatActivity() {
             setDefaultBufferSize(previewSize.width,previewSize.height)
         }
         val previewSurface = Surface(surfaceTexture)
-        val recordSurface: Surface = mVideoReader.surface
+        val recordSurface: Surface = mVideoReader!!.surface
 
         mCaptureRequestBuilder = mCameraDevice!!
                 .createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
@@ -402,12 +402,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun videoResolution(arr:Array<Size>):Size{
         when(resolutionPreference){
-            1 -> {
-                for (item in arr) if(item.width / item.height == 4/3) return item
+            4 -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 1920) return item
+                return Size(1920,1080)
+            }
+            3 -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 960) return item
                 return Size(960,720)
             }
-            0 -> {
+            2 -> {
                 for (item in arr) if(item.width / item.height == 4/3 && item.width <= 720) return item
+                return Size(720,540)
+            }
+            1 -> {
+                for (item in arr) if(item.width / item.height == 4/3 && item.width <= 640) return item
                 return Size(640,480)
             }
             else -> {
@@ -444,10 +452,14 @@ class MainActivity : AppCompatActivity() {
             stopPreview()
             mCameraDevice?.close()
             mCameraDevice = null
-            mVideoReader.close()
+            mVideoReader?.close()
+            mVideoReader = null
         } catch (e: InterruptedException) {
             throw RuntimeException("Can't close camera", e)
+        } catch (e:UninitializedPropertyAccessException){
+            e.printStackTrace()
         }
+
     }
 
     //permissions
@@ -500,7 +512,7 @@ class MainActivity : AppCompatActivity() {
         //resolution
         resolutionPreference = PreferenceManager
                 .getDefaultSharedPreferences(this)
-                .getString("resolution_list", "-1")
+                .getString("resolution_list", "0")
                 .toInt()
         //fps
         fpsCounterFlag = PreferenceManager
