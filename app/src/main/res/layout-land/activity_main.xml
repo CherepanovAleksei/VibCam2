@@ -5,24 +5,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:theme="@style/AppTheme"
     tools:context=".MainActivity">
-    <FrameLayout
+    <com.mrneumann.vibcam.AutoFitTextureView
+        android:id="@+id/texture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
         android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true"
-        android:background="#00ff00"
-        android:id="@+id/frame">
-        <!--<View-->
-            <!--android:id="@+id/tapTexture"-->
-            <!--android:background="#0000ff"/>-->
-        <com.mrneumann.vibcam.AutoFitTextureView
-            android:id="@+id/texture"
-            android:background="#ff0000"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
-    </FrameLayout>
-
+        android:layout_alignParentTop="true" />
     <TextView
         android:id="@+id/fpsCounter"
         android:layout_width="wrap_content"
@@ -31,27 +20,35 @@
         android:layout_alignParentRight="true"
         android:background="@android:color/black"
         android:text=""
-        android:textColor="@android:color/white"
-        tools:layout_editor_absoluteX="133dp"
-        tools:layout_editor_absoluteY="176dp" />
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentStart="true"
-        android:layout_below="@id/frame"
-        android:background="#000">
+        android:textColor="@android:color/white"/>
+    <!--<FrameLayout-->
+        <!--android:layout_width="match_parent"-->
+        <!--android:layout_height="wrap_content"-->
+        <!--android:layout_alignParentBottom="true"-->
+        <!--android:layout_alignParentStart="true"-->
+        <!--android:layout_below="@id/texture"-->
+        <!--android:background="#000">-->
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:layout_below="@id/texture"
+            android:layout_toEndOf="@id/texture"
+            android:orientation="vertical"
+            android:background="#000">
+
         <Button
             android:id="@+id/lensFacingButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="start"
             android:text="Facing" />
         <Button
             android:id="@+id/recordButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
             android:background="@android:color/holo_green_dark"
             android:text="Record" />
 
@@ -59,18 +56,14 @@
             android:id="@+id/settingsButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
             android:text="@string/settings" />
-
-
 
         <Button
             android:id="@+id/galleryButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="end"
             android:text="Gallery" />
-
-    </FrameLayout>
+        </LinearLayout>
+    <!--</FrameLayout>-->
 
 </RelativeLayout>

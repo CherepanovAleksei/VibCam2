@@ -2,6 +2,7 @@ package com.mrneumann.vibcam
 
 import android.Manifest.permission.*
 import android.annotation.SuppressLint
+import android.content.ContentProvider
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -32,9 +33,7 @@ import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRational
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.util.Log
 import android.util.Size
-import android.view.Surface
-import android.view.TextureView
-import android.view.View
+import android.view.*
 import android.widget.Toast
 import android.widget.Toast.*
 import kotlinx.android.synthetic.main.activity_main.*
@@ -133,9 +132,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+//        setRotationAnimation()
         getPermission()
 
-        previewWindow = texture.findViewById(R.id.texture)
+        previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
         recordButton.setOnClickListener {
             if (mIsRecording) {
                 stopRecord()
@@ -569,4 +569,12 @@ class MainActivity : AppCompatActivity() {
         image.close()
         return
     }
+//private fun setRotationAnimation(){
+//    var rotationAnimation:Int = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
+//    var win:Window = window
+//    var winParams:WindowManager.LayoutParams = win.attributes
+//    winParams.rotationAnimation = rotationAnimation
+//    win.attributes = winParams
+//
+//}
 }

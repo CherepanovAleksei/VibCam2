@@ -3,8 +3,10 @@ package com.mrneumann.vibcam
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
+import android.widget.Toast
 
 /**
  * A [TextureView] that can be adjusted to a specified aspect ratio.
@@ -49,5 +51,4 @@ class AutoFitTextureView @JvmOverloads constructor(
             }
         }
     }
-
 }
