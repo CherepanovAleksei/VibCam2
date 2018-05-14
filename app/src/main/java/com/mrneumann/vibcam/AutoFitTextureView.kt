@@ -51,4 +51,9 @@ class AutoFitTextureView @JvmOverloads constructor(
             }
         }
     }
+
+    //this override is important for onTouchListener in MainActivity
+    override fun performClick(): Boolean {
+        return super.performClick()
+    }
 }

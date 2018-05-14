@@ -2,7 +2,6 @@ package com.mrneumann.vibcam
 
 import android.Manifest.permission.*
 import android.annotation.SuppressLint
-import android.content.ContentProvider
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +16,7 @@ import android.hardware.SensorManager.SENSOR_DELAY_NORMAL
 import android.hardware.camera2.*
 import android.hardware.camera2.CameraCharacteristics.*
 import android.hardware.camera2.CameraMetadata.LENS_FACING_BACK
+import android.hardware.camera2.params.MeteringRectangle
 import android.media.Image
 import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
@@ -83,7 +83,6 @@ class MainActivity : AppCompatActivity() {
         stabilisation(imageReader.acquireLatestImage())
     }
     //camera
-    private var mPreviewCaptureSession: CameraCaptureSession? = null
     private var mCameraDevice: CameraDevice? = null
     private lateinit var mCameraId: String
     private var lensFacing = LENS_FACING_BACK
@@ -93,11 +92,14 @@ class MainActivity : AppCompatActivity() {
     private var STORAGE_PERMISSION_REQUEST = 0
     //record
     private var mIsRecording = false
-    private var mRecordCaptureSession: CameraCaptureSession? = null
+    private var mCaptureSession: CameraCaptureSession? = null
     private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
     private var mVideoReader: ImageReader? = null
     var mVideoFileName: String? = null
     lateinit var mVideoFolder: File
+    //TapToFocus
+    var mManualFocusEngaged:Boolean = false
+    lateinit var drawingView:DrawingView
     //resolution and sizes
     private var sensorOrientation = 0
     lateinit var previewSize:Size
@@ -131,11 +133,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
 //        setRotationAnimation()
         getPermission()
-
+        drawingView = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.drawing_view)
         previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
+        setTapToFocus()
+
         recordButton.setOnClickListener {
             if (mIsRecording) {
                 stopRecord()
@@ -162,8 +165,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
         lensFacingButton.setOnClickListener {
-            if(lensFacing == LENS_FACING_BACK) lensFacing = LENS_FACING_FRONT
-            else lensFacing = LENS_FACING_BACK
+            lensFacing = if(lensFacing == LENS_FACING_BACK) LENS_FACING_FRONT else LENS_FACING_BACK
             closeCamera()
             openCamera(previewWindow.width, previewWindow.height)
         }
@@ -260,13 +262,13 @@ class MainActivity : AppCompatActivity() {
             stopPreview()
             mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             mCaptureRequestBuilder.addTarget(previewSurface)
-            mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface/*,mImageReader.surface*/),
+            mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface),
                     object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d(TAG, "onConfigured: startPreview")
-                            mPreviewCaptureSession = session
+                            mCaptureSession = session
                             try {
-                                mPreviewCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                                mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
                             } catch (e: CameraAccessException) {
                                 e.printStackTrace()
                             }
@@ -308,9 +310,9 @@ class MainActivity : AppCompatActivity() {
                 Arrays.asList(recordSurface, previewSurface),
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
-                        mRecordCaptureSession = cameraCaptureSession
+                        mCaptureSession = cameraCaptureSession
                         try {
-                            mRecordCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                            mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
                         } catch (e: CameraAccessException) {
                             e.printStackTrace()
                         }
@@ -427,23 +429,24 @@ class MainActivity : AppCompatActivity() {
 
     //close
     private fun stopPreview() {
-        mPreviewCaptureSession?.stopRepeating()
-        mPreviewCaptureSession?.close()
-        mPreviewCaptureSession = null
+        mCaptureSession?.stopRepeating()
+        mCaptureSession?.close()
+        mCaptureSession = null
     }
 
     private fun stopRecord() {
         //fps stop
         if(fpsCounterFlag) {
             frameCounter.removeCallbacks(runnable)
+            fps = 0
             fpsCounter.text = getString(R.string.fps_name)
         }
 
         mIsRecording = false
         recordButton.setBackgroundColor(android.graphics.Color.GREEN)
-        mRecordCaptureSession?.stopRepeating()
-        mPreviewCaptureSession?.close()
-        mRecordCaptureSession = null
+        mCaptureSession?.stopRepeating()
+        mCaptureSession?.close()
+        mCaptureSession = null
     }
 
     private fun closeCamera() {
@@ -589,4 +592,109 @@ class MainActivity : AppCompatActivity() {
 //    win.attributes = winParams
 //
 //}
+    //TapToFocus
+    private fun setTapToFocus(){
+        previewWindow.setOnTouchListener { view, motionEvent ->
+            if (motionEvent.actionMasked != MotionEvent.ACTION_DOWN) {
+                return@setOnTouchListener false
+            }
+            if (mManualFocusEngaged) {
+                Log.d(TAG, "ManualFocus have already Engaged")
+                return@setOnTouchListener true
+            }
+
+            //draw rectangle
+            drawingView.apply {
+                setHaveTouch(
+                        true,
+                        Rect(
+                                motionEvent.x.toInt() - 100,
+                                motionEvent.y.toInt() - 100 + drawingView.height - previewWindow.height,
+                                motionEvent.x.toInt() + 100,
+                                motionEvent.y.toInt() + 100 + drawingView.height - previewWindow.height))
+                invalidate()
+            }
+            val h = Handler()
+            h.postDelayed({
+                drawingView.setHaveTouch(false,Rect(0,0,0,0))
+                drawingView.invalidate()
+            },1000)
+
+            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val sensorArraySize:Rect = cameraManager
+                    .getCameraCharacteristics(mCameraId)
+                    .get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+            val y:Int = sensorArraySize.height() - ((motionEvent.x / view.width.toFloat())  * sensorArraySize.height().toFloat()).toInt()
+            val x:Int = ((motionEvent.y / view.height.toFloat()) * sensorArraySize.width().toFloat()).toInt()
+
+            val halfTouchWidth  = 100
+            val halfTouchHeight = 100
+
+            val touchArea = MeteringRectangle(
+                    Math.max(x - halfTouchWidth,  0),
+                    Math.max(y - halfTouchHeight, 0),
+                    halfTouchWidth  * 2,
+                    halfTouchHeight * 2,
+                    MeteringRectangle.METERING_WEIGHT_MAX)
+
+            val captureCallbackHandler:CameraCaptureSession.CaptureCallback = object: CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(session: CameraCaptureSession?, request: CaptureRequest?, result: TotalCaptureResult?) {
+                    super.onCaptureCompleted(session, request, result)
+                    mManualFocusEngaged = false
+
+                    if (request?.tag == "FOCUS_TAG") {
+                        //the focus trigger is complete -
+                        //resume repeating (preview surface will get frames), clear AF trigger
+                        mCaptureRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, null)
+                        mCaptureSession!!.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                    }
+                }
+
+                override fun onCaptureFailed(session: CameraCaptureSession?, request: CaptureRequest?, failure: CaptureFailure?) {
+                    super.onCaptureFailed(session, request, failure)
+                    Log.e(TAG, "Manual AF failure: $failure")
+                    mManualFocusEngaged = false
+                }
+            }
+
+            //first stop the existing repeating request
+            mCaptureSession!!.stopRepeating()
+
+            //cancel any existing AF trigger (repeated touches, etc.)
+            mCaptureRequestBuilder.apply {
+                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
+                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            }
+            mCaptureSession!!.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null) //<==mBackgroundHandler
+
+            //Now add a new AF trigger with focus region
+            if (isMeteringAreaAFSupported()) {
+                mCaptureRequestBuilder.apply {
+                    set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(touchArea))
+                    set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(touchArea))
+                    set(CaptureRequest.CONTROL_AWB_REGIONS, arrayOf(touchArea))
+                }
+            }
+            mCaptureRequestBuilder.apply {
+                set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                setTag("FOCUS_TAG") //we'll capture this later for resuming the preview
+            }
+            mCaptureSession!!.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null)
+            mManualFocusEngaged = true
+
+            return@setOnTouchListener true
+        }
+    }
+    private fun isMeteringAreaAFSupported():Boolean {
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        return cameraManager
+                .getCameraCharacteristics(mCameraId)
+                .get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) >= 1
+    }
 }
