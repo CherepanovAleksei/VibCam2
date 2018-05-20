@@ -13,14 +13,6 @@
         android:layout_alignParentTop="true"
         android:background="#000000"
         android:id="@+id/frame">
-
-        <View
-            app:layout_constraintBottom_toBottomOf="@id/texture"
-            app:layout_constraintEnd_toEndOf="@id/texture"
-            android:id="@+id/tapView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#00ff00"/>
         <com.mrneumann.vibcam.AutoFitTextureView
             android:id="@+id/texture"
             android:background="#ff0000"
@@ -54,35 +46,40 @@
         android:layout_alignParentStart="true"
         android:layout_below="@id/frame"
         android:background="#000">
-        <Button
+        <ImageButton
             android:id="@+id/lensFacingButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
-            android:text="Facing" />
-        <Button
+            android:src="@drawable/camera_selector"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/camera_facing" />
+        <ImageButton
             android:id="@+id/recordButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:background="@android:color/holo_green_dark"
-            android:text="Record" />
+            android:background="@drawable/record_button_color_selector"
+            android:src="@mipmap/baseline_photo_camera_black_48"
+            android:contentDescription="@string/record" />
 
-        <Button
+        <ImageButton
             android:id="@+id/settingsButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
-            android:text="@string/settings" />
+            android:background="@android:color/transparent"
+            android:src="@mipmap/baseline_settings_white_48"
+            android:contentDescription="@string/settings" />
 
-
-
-        <Button
+        <ImageButton
             android:id="@+id/galleryButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:text="Gallery" />
+            android:contentDescription="@string/gallery"
+            android:background="@android:color/transparent"
+            android:src="@mipmap/baseline_image_white_48"/>
 
     </FrameLayout>
 

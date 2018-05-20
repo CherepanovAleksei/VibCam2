@@ -17,4 +17,7 @@
     </string-array>
     <string name="fps_name">fps</string>
     <string name="settings">settings</string>
+    <string name="camera_facing">Facing</string>
+    <string name="record">Record</string>
+    <string name="gallery">Gallery</string>
 </resources>

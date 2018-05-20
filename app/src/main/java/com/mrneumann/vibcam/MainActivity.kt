@@ -2,6 +2,7 @@ package com.mrneumann.vibcam
 
 import android.Manifest.permission.*
 import android.annotation.SuppressLint
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -34,6 +35,7 @@ import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.util.Log
 import android.util.Size
 import android.view.*
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
 import android.widget.Toast.*
 import kotlinx.android.synthetic.main.activity_main.*
@@ -128,16 +130,73 @@ class MainActivity : AppCompatActivity() {
     var mGyroscopeArr: FloatArray = FloatArray(3)
     private var mGyroscope: Sensor? = null
     private var mGyroscopeListener:SensorEventListener? = null
+    //Orientation
+    private lateinit var mOrientationSensorManager: SensorManager
+    private var mRotateAccelerometer: Sensor? = null
+    private var mRotateAccelerometerListener:SensorEventListener? = null
+    var orientation: Float = 0F
 
+    private fun rotationStart(){
+        mRotateAccelerometerListener = object : SensorEventListener {
+            override fun onSensorChanged(sensorEvent: SensorEvent) {
+                val mySensor = sensorEvent.sensor as Sensor
+                if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
+                    val x:Float = sensorEvent.values[0]
+                    val y:Float = sensorEvent.values[1]
+                    var newOrientation:Float? = null
+                    //vertical
+                    if (y>7 && x<5 && x>-5 && orientation != 0F) {
+                        newOrientation = 0F
+                        Log.d(TAG, "vertical")
+                    }
+                    //landscape_left
+                    else if (x>7 && y<5 && y>-5 && orientation != 90F) {
+                        newOrientation = 90F
+                        Log.d(TAG, "landscape_left")
+                    }
+
+                    //reverse_vertical
+                    else if (y<-7 && x<5 && x>-5 && orientation != 180F) {
+                        newOrientation = 180F
+                        Log.d(TAG, "reverse_vertical")
+                    }
+                    //landscape_right
+                    else if (x<-7 && y<5 && y>-5 && orientation != -90F) {
+                        newOrientation = -90F
+                        Log.d(TAG, "landscape_right")
+                    }
+                    if (newOrientation != null){
+                        val deg:Float = newOrientation
+                        recordButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+                        Log.d(TAG, recordButton.rotation.toString())
+                        orientation = newOrientation
+                    }
+                }
+            }
+
+            override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+        }
+
+        mRotateAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        mOrientationSensorManager.registerListener(mRotateAccelerometerListener, mRotateAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+    private fun rotationLock(){
+        mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
+        mRotateAccelerometerListener = null
+        mRotateAccelerometer = null
+    }
     //Activities
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-//        setRotationAnimation()
+        setRotationAnimation()
         getPermission()
+
         drawingView = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.drawing_view)
         previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
+
         setTapToFocus()
+        mOrientationSensorManager = getSystemService(Service.SENSOR_SERVICE) as SensorManager
 
         recordButton.setOnClickListener {
             if (mIsRecording) {
@@ -147,7 +206,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 mIsRecording = true
                 makeInvisible()
-                recordButton.setBackgroundColor(android.graphics.Color.RED)
+                recordButton.isSelected = true
                 getPermission()
                 startRecord()
             }
@@ -165,7 +224,13 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
         lensFacingButton.setOnClickListener {
-            lensFacing = if(lensFacing == LENS_FACING_BACK) LENS_FACING_FRONT else LENS_FACING_BACK
+            if(lensFacing == LENS_FACING_BACK) {
+                lensFacing = LENS_FACING_FRONT
+                lensFacingButton.isSelected = false
+            } else {
+                lensFacing = LENS_FACING_BACK
+                lensFacingButton.isSelected = true
+            }
             closeCamera()
             openCamera(previewWindow.width, previewWindow.height)
         }
@@ -193,10 +258,11 @@ class MainActivity : AppCompatActivity() {
         if (mIsRecording) stopRecord()
         if(accelerometerFlag) mSensorManager.unregisterListener(mAccelerometerListener)
         if(gyroscopeFlag) mSensorManager.unregisterListener(mGyroscopeListener)
+        mSensorManager.unregisterListener(mRotateAccelerometerListener)
         closeCamera()
         super.onPause()
     }
-
+//TODO check preview resolution
     //setup camera
     private fun openCamera(width: Int, height: Int) {
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -229,8 +295,8 @@ class MainActivity : AppCompatActivity() {
                         height,
                         videoSize
                 )
-
-
+                rotationStart()
+//TODO start orientation
                 if(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE){
                     previewWindow.setAspectRatio(previewSize.width,previewSize.height)
                 }else{
@@ -443,7 +509,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         mIsRecording = false
-        recordButton.setBackgroundColor(android.graphics.Color.GREEN)
+        recordButton.isSelected = false
         mCaptureSession?.stopRepeating()
         mCaptureSession?.close()
         mCaptureSession = null
@@ -584,14 +650,14 @@ class MainActivity : AppCompatActivity() {
         image.close()
         return
     }
-//private fun setRotationAnimation(){
-//    var rotationAnimation:Int = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
-//    var win:Window = window
-//    var winParams:WindowManager.LayoutParams = win.attributes
-//    winParams.rotationAnimation = rotationAnimation
-//    win.attributes = winParams
-//
-//}
+private fun setRotationAnimation(){
+    var rotationAnimation:Int = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
+    var win:Window = window
+    var winParams:WindowManager.LayoutParams = win.attributes
+    winParams.rotationAnimation = rotationAnimation
+    win.attributes = winParams
+
+}
     //TapToFocus
     private fun setTapToFocus(){
         previewWindow.setOnTouchListener { view, motionEvent ->
