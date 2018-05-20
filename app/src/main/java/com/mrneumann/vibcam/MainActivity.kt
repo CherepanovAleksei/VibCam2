@@ -38,7 +38,10 @@ import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.util.Size
-import android.view.*
+import android.view.MotionEvent
+import android.view.Surface
+import android.view.TextureView
+import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
 import android.widget.Toast.LENGTH_SHORT
@@ -51,7 +54,7 @@ import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
-    val TAG = "VibCam"
+    val tagVC = "VibCam"
     //listeners
     private var mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -107,11 +110,11 @@ class MainActivity : AppCompatActivity() {
     lateinit var mVideoFolder: File
     //TapToFocus
     var mManualFocusEngaged:Boolean = false
-    lateinit var drawingView:DrawingView
+    private lateinit var drawingView: DrawingView
     //resolution and sizes
     private var sensorOrientation = 0
-    lateinit var previewSize:Size
-    lateinit var videoSize:Size
+    private lateinit var previewSize: Size
+    private lateinit var videoSize: Size
     //preferences flags
     private var fpsCounterFlag = false
     private var gyroscopeFlag = false
@@ -142,69 +145,15 @@ class MainActivity : AppCompatActivity() {
     private var mRotateAccelerometerListener:SensorEventListener? = null
     var orientation: Float = 0F
 
-    private fun rotationStart(){
-        mRotateAccelerometerListener = object : SensorEventListener {
-            override fun onSensorChanged(sensorEvent: SensorEvent) {
-                val mySensor = sensorEvent.sensor as Sensor
-                if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
-                    val x:Float = sensorEvent.values[0]
-                    val y:Float = sensorEvent.values[1]
-                    var newOrientation:Float? = null
-                    //vertical
-                    if (y>7 && x<5 && x>-5 && orientation != 0F) {
-                        newOrientation = 0F
-                        Log.d(TAG, "vertical")
-                    }
-                    //landscape_left
-                    else if (x>7 && y<5 && y>-5 && orientation != 90F) {
-                        newOrientation = 90F
-                        Log.d(TAG, "landscape_left")
-                    }
-
-                    //reverse_vertical
-                    else if (y<-7 && x<5 && x>-5 && orientation != 180F) {
-                        newOrientation = 180F
-                        Log.d(TAG, "reverse_vertical")
-                    }
-                    //landscape_right
-                    else if (x<-7 && y<5 && y>-5 && orientation != -90F) {
-                        newOrientation = -90F
-                        Log.d(TAG, "landscape_right")
-                    }
-                    if (newOrientation != null){
-                        val deg:Float = newOrientation
-                        recordButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-                        settingsButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-                        lensFacingButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-                        galleryButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-                        orientation = newOrientation
-                    }
-                }
-            }
-
-            override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
-        }
-
-        mRotateAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        mOrientationSensorManager.registerListener(mRotateAccelerometerListener, mRotateAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
-    }
-    private fun rotationLock(){
-        if (mRotateAccelerometerListener != null)
-            mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
-        mRotateAccelerometerListener = null
-        mRotateAccelerometer = null
-    }
     //Activities
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        setRotationAnimation()
         getPermission()
 
         drawingView = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.drawing_view)
         previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
 
-        setTapToFocus()
         mOrientationSensorManager = getSystemService(Service.SENSOR_SERVICE) as SensorManager
 
         recordButton.setOnClickListener {
@@ -310,7 +259,7 @@ class MainActivity : AppCompatActivity() {
                         videoSize
                 )
                 previewWindow.setAspectRatio(previewSize.height, previewSize.width)
-                Log.d(TAG, "prewiew window size: h:" + previewSize.height.toString() + " w:" + previewSize.width.toString())
+                Log.d(tagVC, "prewiew window size: h:" + previewSize.height.toString() + " w:" + previewSize.width.toString())
                 configureTransform(width,height)
 
                 if (checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
@@ -318,10 +267,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } catch (e: CameraAccessException) {
-            Log.e(TAG, "Cannot access the camera.")
+            Log.e(tagVC, "Cannot access the camera.")
             this.finish()
         } catch (e: NullPointerException) {
-            Log.e(TAG, "NullPointerException in openCamera")
+            Log.e(tagVC, "NullPointerException in openCamera")
 
         } catch (e: InterruptedException) {
             throw RuntimeException("Interrupted while trying to lock camera opening.")
@@ -341,7 +290,7 @@ class MainActivity : AppCompatActivity() {
             mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface),
                     object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
-                            Log.d(TAG, "onConfigured: startPreview")
+                            Log.d(tagVC, "onConfigured: startPreview")
                             mCaptureSession = session
                             try {
                                 mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
@@ -351,10 +300,11 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         override fun onConfigureFailed(p0: CameraCaptureSession?) {
-                            Log.d(TAG, "onConfigureFailed: startPreview")
+                            Log.d(tagVC, "onConfigureFailed: startPreview")
                         }
                     },
                     null)
+            setTapToFocus()
         } catch (e: CameraAccessException) {
             e.printStackTrace()
         }
@@ -398,17 +348,17 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession?) {
-                        Log.d(TAG, "onConfigureFailed in startRecord()")
+                        Log.d(tagVC, "onConfigureFailed in startRecord()")
                     }
                 }, null)
     } catch (e: CameraAccessException) {
-        Log.e(TAG, e.toString())
+        Log.e(tagVC, e.toString())
     } catch (e: IOException) {
-        Log.e(TAG, e.toString())
+        Log.e(tagVC, e.toString())
     }
 
     //setup
-    fun createVideoFolder() {
+    private fun createVideoFolder() {
         val videoFile: File = Environment
                 .getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         mVideoFolder = File(videoFile, "VibCam")
@@ -657,7 +607,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     //stabilisation
-    fun stabilisation(image: Image?) {
+    private fun stabilisation(image: Image?) {
         if (null == image) return
         if(fpsCounterFlag) {
             fps++
@@ -665,14 +615,7 @@ class MainActivity : AppCompatActivity() {
         image.close()
         return
     }
-private fun setRotationAnimation(){
-    var rotationAnimation:Int = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
-    var win:Window = window
-    var winParams:WindowManager.LayoutParams = win.attributes
-    winParams.rotationAnimation = rotationAnimation
-    win.attributes = winParams
 
-}
     //TapToFocus
     private fun setTapToFocus(){
         previewWindow.setOnTouchListener { view, motionEvent ->
@@ -680,7 +623,7 @@ private fun setRotationAnimation(){
                 return@setOnTouchListener false
             }
             if (mManualFocusEngaged) {
-                Log.d(TAG, "ManualFocus have already Engaged")
+                Log.d(tagVC, "ManualFocus have already Engaged")
                 return@setOnTouchListener true
             }
 
@@ -727,19 +670,19 @@ private fun setRotationAnimation(){
                         //the focus trigger is complete -
                         //resume repeating (preview surface will get frames), clear AF trigger
                         mCaptureRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, null)
-                        mCaptureSession!!.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                        mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
                     }
                 }
 
                 override fun onCaptureFailed(session: CameraCaptureSession?, request: CaptureRequest?, failure: CaptureFailure?) {
                     super.onCaptureFailed(session, request, failure)
-                    Log.e(TAG, "Manual AF failure: $failure")
+                    Log.e(tagVC, "Manual AF failure: $failure")
                     mManualFocusEngaged = false
                 }
             }
 
             //first stop the existing repeating request
-            mCaptureSession!!.stopRepeating()
+            mCaptureSession?.stopRepeating()
 
             //cancel any existing AF trigger (repeated touches, etc.)
             mCaptureRequestBuilder.apply {
@@ -748,7 +691,7 @@ private fun setRotationAnimation(){
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
                 set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
             }
-            mCaptureSession!!.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null) //<==mBackgroundHandler
+            mCaptureSession?.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null) //<==mBackgroundHandler
 
             //Now add a new AF trigger with focus region
             if (isMeteringAreaAFSupported()) {
@@ -766,7 +709,7 @@ private fun setRotationAnimation(){
                 set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
                 setTag("FOCUS_TAG") //we'll capture this later for resuming the preview
             }
-            mCaptureSession!!.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null)
+            mCaptureSession?.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null)
             mManualFocusEngaged = true
 
             return@setOnTouchListener true
@@ -777,5 +720,60 @@ private fun setRotationAnimation(){
         return cameraManager
                 .getCameraCharacteristics(mCameraId)
                 .get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) >= 1
+    }
+
+    //rotation
+    private fun rotationStart() {
+        mRotateAccelerometerListener = object : SensorEventListener {
+            override fun onSensorChanged(sensorEvent: SensorEvent) {
+                val mySensor = sensorEvent.sensor as Sensor
+                if (mySensor.type == Sensor.TYPE_ACCELEROMETER) {
+                    val x: Float = sensorEvent.values[0]
+                    val y: Float = sensorEvent.values[1]
+                    var newOrientation: Float? = null
+                    //vertical
+                    if (y > 7 && x < 5 && x > -5 && orientation != 0F) {
+                        newOrientation = 0F
+//                        Log.d(tagVC, "vertical")
+                    }
+                    //landscape_left
+                    else if (x > 7 && y < 5 && y > -5 && orientation != 90F) {
+                        newOrientation = 90F
+//                        Log.d(tagVC, "landscape_left")
+                    }
+
+                    //reverse_vertical
+                    else if (y < -7 && x < 5 && x > -5 && orientation != 180F) {
+                        newOrientation = 180F
+//                        Log.d(tagVC, "reverse_vertical")
+                    }
+                    //landscape_right
+                    else if (x < -7 && y < 5 && y > -5 && orientation != -90F) {
+                        newOrientation = -90F
+//                        Log.d(tagVC, "landscape_right")
+                    }
+                    if (newOrientation != null) {
+                        val deg: Float = newOrientation
+                        for (imageButton in listOf(recordButton, settingsButton, lensFacingButton, galleryButton))
+                            imageButton.apply {
+                                animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+                            }
+                        orientation = newOrientation
+                    }
+                }
+            }
+
+            override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+        }
+
+        mRotateAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        mOrientationSensorManager.registerListener(mRotateAccelerometerListener, mRotateAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+
+    private fun rotationLock() {
+        if (mRotateAccelerometerListener != null)
+            mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
+        mRotateAccelerometerListener = null
+        mRotateAccelerometer = null
     }
 }
