@@ -1,14 +1,17 @@
 package com.mrneumann.vibcam
 
-import android.Manifest.permission.*
+import android.Manifest.permission.CAMERA
+import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.Configuration
-import android.graphics.*
 import android.graphics.ImageFormat.YUV_420_888
+import android.graphics.Matrix
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.SurfaceTexture
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -22,8 +25,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
 import android.media.ImageReader.newInstance
-import android.support.v7.app.AppCompatActivity
-import android.support.v4.content.ContextCompat.checkSelfPermission
+import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -31,18 +33,22 @@ import android.preference.PreferenceActivity
 import android.preference.PreferenceManager
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRationale
+import android.support.v4.content.ContextCompat.checkSelfPermission
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
+import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.util.Size
 import android.view.*
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
-import android.widget.Toast.*
+import android.widget.Toast.LENGTH_SHORT
+import android.widget.Toast.makeText
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
+
 class MainActivity : AppCompatActivity() {
 
     val TAG = "VibCam"
@@ -168,7 +174,9 @@ class MainActivity : AppCompatActivity() {
                     if (newOrientation != null){
                         val deg:Float = newOrientation
                         recordButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-                        Log.d(TAG, recordButton.rotation.toString())
+                        settingsButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+                        lensFacingButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+                        galleryButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
                         orientation = newOrientation
                     }
                 }
@@ -181,7 +189,8 @@ class MainActivity : AppCompatActivity() {
         mOrientationSensorManager.registerListener(mRotateAccelerometerListener, mRotateAccelerometer, SensorManager.SENSOR_DELAY_NORMAL)
     }
     private fun rotationLock(){
-        mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
+        if (mRotateAccelerometerListener != null)
+            mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
         mRotateAccelerometerListener = null
         mRotateAccelerometer = null
     }
@@ -203,6 +212,11 @@ class MainActivity : AppCompatActivity() {
                 stopRecord()
                 makeVisible()
                 startPreview()
+
+                //TODO send to Telegram
+                val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                mediaStoreUpdateIntent.data = Uri.fromFile(File(mVideoFileName))
+                sendBroadcast(mediaStoreUpdateIntent)
             } else {
                 mIsRecording = true
                 makeInvisible()
@@ -258,7 +272,7 @@ class MainActivity : AppCompatActivity() {
         if (mIsRecording) stopRecord()
         if(accelerometerFlag) mSensorManager.unregisterListener(mAccelerometerListener)
         if(gyroscopeFlag) mSensorManager.unregisterListener(mGyroscopeListener)
-        mSensorManager.unregisterListener(mRotateAccelerometerListener)
+        mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
         closeCamera()
         super.onPause()
     }
@@ -295,17 +309,12 @@ class MainActivity : AppCompatActivity() {
                         height,
                         videoSize
                 )
-                rotationStart()
-//TODO start orientation
-                if(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE){
-                    previewWindow.setAspectRatio(previewSize.width,previewSize.height)
-                }else{
-                    previewWindow.setAspectRatio(previewSize.height,previewSize.width)
-                }
+                previewWindow.setAspectRatio(previewSize.height, previewSize.width)
+                Log.d(TAG, "prewiew window size: h:" + previewSize.height.toString() + " w:" + previewSize.width.toString())
                 configureTransform(width,height)
 
                 if (checkSelfPermission(this@MainActivity, CAMERA) == PERMISSION_GRANTED) {
-                    cameraManager.openCamera(camID, mCameraDeviceStateCallback, null) //mBackgroundHandler
+                    cameraManager.openCamera(camID, mCameraDeviceStateCallback, null)
                 }
             }
         } catch (e: CameraAccessException) {
@@ -326,6 +335,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             stopPreview()
+            rotationStart()
             mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             mCaptureRequestBuilder.addTarget(previewSurface)
             mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface),
@@ -378,7 +388,10 @@ class MainActivity : AppCompatActivity() {
                     override fun onConfigured(cameraCaptureSession: CameraCaptureSession) {
                         mCaptureSession = cameraCaptureSession
                         try {
-                            mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                            mCaptureSession?.setRepeatingRequest(
+                                    mCaptureRequestBuilder.build(),
+                                    null,
+                                    null)
                         } catch (e: CameraAccessException) {
                             e.printStackTrace()
                         }
@@ -396,7 +409,8 @@ class MainActivity : AppCompatActivity() {
 
     //setup
     fun createVideoFolder() {
-        val videoFile: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val videoFile: File = Environment
+                .getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         mVideoFolder = File(videoFile, "VibCam")
         if (!mVideoFolder.exists()) {
             mVideoFolder.mkdirs()
@@ -495,6 +509,7 @@ class MainActivity : AppCompatActivity() {
 
     //close
     private fun stopPreview() {
+        rotationLock()
         mCaptureSession?.stopRepeating()
         mCaptureSession?.close()
         mCaptureSession = null
