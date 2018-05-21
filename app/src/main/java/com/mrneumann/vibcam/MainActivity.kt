@@ -6,7 +6,6 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.ImageFormat.YUV_420_888
 import android.graphics.Matrix
 import android.graphics.Rect
@@ -32,8 +31,8 @@ import android.os.Handler
 import android.preference.PreferenceActivity
 import android.preference.PreferenceManager
 import android.support.v4.app.ActivityCompat
-import android.support.v4.app.ActivityCompat.shouldShowRequestPermissionRationale
 import android.support.v4.content.ContextCompat.checkSelfPermission
+import android.support.v4.content.PermissionChecker.PERMISSION_DENIED
 import android.support.v4.content.PermissionChecker.PERMISSION_GRANTED
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
@@ -99,8 +98,7 @@ class MainActivity : AppCompatActivity() {
     private var lensFacing = LENS_FACING_BACK
     private lateinit var previewWindow: AutoFitTextureView
     //permission
-    private var CAMERA_PERMISSION_REQUEST = 0
-    private var STORAGE_PERMISSION_REQUEST = 0
+    private var PERMISSION_REQUEST = 0
     //record
     private var mIsRecording = false
     private var mCaptureSession: CameraCaptureSession? = null
@@ -112,7 +110,7 @@ class MainActivity : AppCompatActivity() {
     var mManualFocusEngaged:Boolean = false
     private lateinit var drawingView: DrawingView
     //resolution and sizes
-    private var sensorOrientation = 0
+    private var resolutionChanged: Boolean = false
     private lateinit var previewSize: Size
     private lateinit var videoSize: Size
     //preferences flags
@@ -149,7 +147,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        getPermission()
+        ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA, WRITE_EXTERNAL_STORAGE), PERMISSION_REQUEST)
 
         drawingView = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.drawing_view)
         previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
@@ -170,7 +168,6 @@ class MainActivity : AppCompatActivity() {
                 mIsRecording = true
                 makeInvisible()
                 recordButton.isSelected = true
-                getPermission()
                 startRecord()
             }
         }
@@ -237,7 +234,6 @@ class MainActivity : AppCompatActivity() {
                 mCameraId = camID
 
                 //resolution
-                sensorOrientation = cameraCharacteristics.get(SENSOR_ORIENTATION)
                 val map = cameraCharacteristics
                         .get(SCALER_STREAM_CONFIGURATION_MAP)
                 videoSize = videoResolution(map.getOutputSizes(ImageReader::class.java))
@@ -250,8 +246,10 @@ class MainActivity : AppCompatActivity() {
                 ).apply {
                     setOnImageAvailableListener(mOnVideoAvailableListener, null)
                 }
-                Toast.makeText(this,mVideoReader!!.width.toString()+"x"+mVideoReader!!.height.toString(), LENGTH_SHORT).show()
-
+                if (resolutionChanged) {
+                    Toast.makeText(this, mVideoReader!!.width.toString() + "x" + mVideoReader!!.height.toString(), LENGTH_SHORT).show()
+                    resolutionChanged = false
+                }
                 previewSize = chooseOptimalSize(
                         map.getOutputSizes(SurfaceTexture::class.java),
                         width,
@@ -460,7 +458,7 @@ class MainActivity : AppCompatActivity() {
     //close
     private fun stopPreview() {
         rotationLock()
-        mCaptureSession?.stopRepeating()
+//        mCaptureSession?.stopRepeating()
         mCaptureSession?.close()
         mCaptureSession = null
     }
@@ -497,43 +495,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     //permissions
-    private fun getPermission() {
-        if (checkSelfPermission(this@MainActivity, CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            if (shouldShowRequestPermissionRationale(this@MainActivity, CAMERA)) {
-                makeText(this@MainActivity, "I can't work without Camera!", LENGTH_SHORT).show()
-            }
-            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA), CAMERA_PERMISSION_REQUEST)
-        }
-        if (checkSelfPermission(this@MainActivity, WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            if (shouldShowRequestPermissionRationale(this@MainActivity, WRITE_EXTERNAL_STORAGE)) {
-                makeText(this@MainActivity, "I can't work without saving!", LENGTH_SHORT).show()
-            }
-            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(WRITE_EXTERNAL_STORAGE), STORAGE_PERMISSION_REQUEST)
-        }
-    }
-
     override fun onRequestPermissionsResult(
             requestCode: Int,
             permissions: Array<String>,
             grantResults: IntArray
     ) {
         when (requestCode) {
-            CAMERA_PERMISSION_REQUEST -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-
-                } else {
-                    makeText(this@MainActivity, "I can't work without Camera!!", LENGTH_SHORT).show()
-
-                }
-                return
-            }
-            STORAGE_PERMISSION_REQUEST -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-
-                } else {
-                    makeText(this@MainActivity, "I can't work without saving!", LENGTH_SHORT).show()
+            PERMISSION_REQUEST -> {
+                if (grantResults.isEmpty()
+                        || grantResults[0] == PERMISSION_DENIED
+                        || grantResults[1] == PERMISSION_DENIED) {
+                    makeText(this@MainActivity, "I can't work without it!", LENGTH_SHORT).show()
                     this@MainActivity.finish()
                 }
                 return
@@ -544,10 +516,14 @@ class MainActivity : AppCompatActivity() {
     //preferences
     private fun updatePreferences(){
         //resolution
-        resolutionPreference = PreferenceManager
+        val newResolutionPreference = PreferenceManager
                 .getDefaultSharedPreferences(this)
                 .getString("resolution_list", "0")
                 .toInt()
+        if (newResolutionPreference != resolutionPreference) {
+            resolutionPreference = newResolutionPreference
+            resolutionChanged = true
+        }
         //fps
         fpsCounterFlag = PreferenceManager
                 .getDefaultSharedPreferences(this)
