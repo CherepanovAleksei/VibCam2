@@ -3,6 +3,7 @@ package com.mrneumann.vibcam
 import android.Manifest.permission.CAMERA
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -25,6 +26,7 @@ import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
 import android.media.ImageReader.newInstance
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -147,8 +149,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA, WRITE_EXTERNAL_STORAGE), PERMISSION_REQUEST)
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ActivityCompat.requestPermissions(this@MainActivity, arrayOf(CAMERA, WRITE_EXTERNAL_STORAGE), PERMISSION_REQUEST)
+        }
         drawingView = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.drawing_view)
         previewWindow = this.window.decorView.findViewById<View>(android.R.id.content).findViewById(R.id.texture)
 
@@ -160,10 +163,8 @@ class MainActivity : AppCompatActivity() {
                 makeVisible()
                 startPreview()
 
-                //TODO send to Telegram
-                val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-                mediaStoreUpdateIntent.data = Uri.fromFile(File(mVideoFileName))
-                sendBroadcast(mediaStoreUpdateIntent)
+                updateGallery()
+                finishWithResult()
             } else {
                 mIsRecording = true
                 makeInvisible()
@@ -751,5 +752,20 @@ class MainActivity : AppCompatActivity() {
             mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
         mRotateAccelerometerListener = null
         mRotateAccelerometer = null
+    }
+
+    //Integration
+    private fun finishWithResult() {
+        val sendVideoIntent = Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE)
+        sendVideoIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, Uri.fromFile(File(mVideoFileName)))
+        setResult(Activity.RESULT_OK, sendVideoIntent)
+        sendBroadcast(sendVideoIntent)
+        //TODO finish()
+    }
+
+    private fun updateGallery() {
+        val mediaStoreUpdateIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+        mediaStoreUpdateIntent.data = Uri.fromFile(File(mVideoFileName))
+        sendBroadcast(mediaStoreUpdateIntent)
     }
 }
