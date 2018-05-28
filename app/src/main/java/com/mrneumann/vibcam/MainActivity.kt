@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
     //record
     private var mIsRecording = false
     private var mCaptureSession: CameraCaptureSession? = null
-    private lateinit var mCaptureRequestBuilder: CaptureRequest.Builder
+    private var mCaptureRequestBuilder: CaptureRequest.Builder? = null
     private var mVideoReader: ImageReader? = null
     var mVideoFileName: String? = null
     lateinit var mVideoFolder: File
@@ -160,11 +160,7 @@ class MainActivity : AppCompatActivity() {
         recordButton.setOnClickListener {
             if (mIsRecording) {
                 stopRecord()
-                makeVisible()
                 startPreview()
-
-                updateGallery()
-                finishWithResult()
             } else {
                 mIsRecording = true
                 makeInvisible()
@@ -196,6 +192,7 @@ class MainActivity : AppCompatActivity() {
             openCamera(previewWindow.width, previewWindow.height)
         }
         galleryButton.setOnClickListener{
+            closeCamera()
             startActivity(Intent(Intent.ACTION_VIEW).apply {
                 type = "image/*"
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -219,7 +216,9 @@ class MainActivity : AppCompatActivity() {
         if (mIsRecording) stopRecord()
         if(accelerometerFlag) mSensorManager.unregisterListener(mAccelerometerListener)
         if(gyroscopeFlag) mSensorManager.unregisterListener(mGyroscopeListener)
-        mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
+        if (mRotateAccelerometerListener != null) {
+            mOrientationSensorManager.unregisterListener(mRotateAccelerometerListener)
+        }
         closeCamera()
         super.onPause()
     }
@@ -284,15 +283,15 @@ class MainActivity : AppCompatActivity() {
         try {
             stopPreview()
             rotationStart()
-            mCaptureRequestBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            mCaptureRequestBuilder.addTarget(previewSurface)
-            mCameraDevice!!.createCaptureSession(Arrays.asList(previewSurface),
+            mCaptureRequestBuilder = mCameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+            mCaptureRequestBuilder?.addTarget(previewSurface)
+            mCameraDevice?.createCaptureSession(Arrays.asList(previewSurface),
                     object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d(tagVC, "onConfigured: startPreview")
                             mCaptureSession = session
                             try {
-                                mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                                mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder?.build(), null, null)
                             } catch (e: CameraAccessException) {
                                 e.printStackTrace()
                             }
@@ -338,7 +337,7 @@ class MainActivity : AppCompatActivity() {
                         mCaptureSession = cameraCaptureSession
                         try {
                             mCaptureSession?.setRepeatingRequest(
-                                    mCaptureRequestBuilder.build(),
+                                    mCaptureRequestBuilder?.build(),
                                     null,
                                     null)
                         } catch (e: CameraAccessException) {
@@ -472,11 +471,17 @@ class MainActivity : AppCompatActivity() {
             fpsCounter.text = getString(R.string.fps_name)
         }
 
+        //Buttons
         mIsRecording = false
+        makeVisible()
         recordButton.isSelected = false
+
         mCaptureSession?.stopRepeating()
         mCaptureSession?.close()
         mCaptureSession = null
+
+        updateGallery()
+        finishWithResult()
     }
 
     private fun closeCamera() {
@@ -646,8 +651,8 @@ class MainActivity : AppCompatActivity() {
                     if (request?.tag == "FOCUS_TAG") {
                         //the focus trigger is complete -
                         //resume repeating (preview surface will get frames), clear AF trigger
-                        mCaptureRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, null)
-                        mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder.build(), null, null)
+                        mCaptureRequestBuilder?.set(CaptureRequest.CONTROL_AF_TRIGGER, null)
+                        mCaptureSession?.setRepeatingRequest(mCaptureRequestBuilder?.build(), null, null)
                     }
                 }
 
@@ -662,23 +667,23 @@ class MainActivity : AppCompatActivity() {
             mCaptureSession?.stopRepeating()
 
             //cancel any existing AF trigger (repeated touches, etc.)
-            mCaptureRequestBuilder.apply {
+            mCaptureRequestBuilder?.apply {
                 set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
                 set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
             }
-            mCaptureSession?.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null) //<==mBackgroundHandler
+            mCaptureSession?.capture(mCaptureRequestBuilder?.build(), captureCallbackHandler, null) //<==mBackgroundHandler
 
             //Now add a new AF trigger with focus region
             if (isMeteringAreaAFSupported()) {
-                mCaptureRequestBuilder.apply {
+                mCaptureRequestBuilder?.apply {
                     set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(touchArea))
                     set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(touchArea))
                     set(CaptureRequest.CONTROL_AWB_REGIONS, arrayOf(touchArea))
                 }
             }
-            mCaptureRequestBuilder.apply {
+            mCaptureRequestBuilder?.apply {
                 set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
                 set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
@@ -686,7 +691,7 @@ class MainActivity : AppCompatActivity() {
                 set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
                 setTag("FOCUS_TAG") //we'll capture this later for resuming the preview
             }
-            mCaptureSession?.capture(mCaptureRequestBuilder.build(), captureCallbackHandler, null)
+            mCaptureSession?.capture(mCaptureRequestBuilder?.build(), captureCallbackHandler, null)
             mManualFocusEngaged = true
 
             return@setOnTouchListener true
@@ -711,23 +716,19 @@ class MainActivity : AppCompatActivity() {
                     //vertical
                     if (y > 7 && x < 5 && x > -5 && orientation != 0F) {
                         newOrientation = 0F
-//                        Log.d(tagVC, "vertical")
                     }
                     //landscape_left
-                    else if (x > 7 && y < 5 && y > -5 && orientation != 90F) {
+                    else if (x > 5 && y < 5 && orientation != 90F) {
                         newOrientation = 90F
-//                        Log.d(tagVC, "landscape_left")
                     }
 
-                    //reverse_vertical
-                    else if (y < -7 && x < 5 && x > -5 && orientation != 180F) {
-                        newOrientation = 180F
-//                        Log.d(tagVC, "reverse_vertical")
-                    }
+//                    //reverse_vertical
+//                    else if (y < -7 && x < 5 && x > -5 && orientation != 180F) {
+//                        newOrientation = 180F
+//                    }
                     //landscape_right
-                    else if (x < -7 && y < 5 && y > -5 && orientation != -90F) {
+                    else if (x < -5 && y < 5 && orientation != -90F) {
                         newOrientation = -90F
-//                        Log.d(tagVC, "landscape_right")
                     }
                     if (newOrientation != null) {
                         val deg: Float = newOrientation
@@ -756,11 +757,14 @@ class MainActivity : AppCompatActivity() {
 
     //Integration
     private fun finishWithResult() {
-        val sendVideoIntent = Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE)
-        sendVideoIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, Uri.fromFile(File(mVideoFileName)))
-        setResult(Activity.RESULT_OK, sendVideoIntent)
-        sendBroadcast(sendVideoIntent)
-        //TODO finish()
+        if (callingActivity != null) {
+            closeCamera()
+            val sendVideoIntent = Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE)
+            sendVideoIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, Uri.fromFile(File(mVideoFileName)))
+            setResult(Activity.RESULT_OK, sendVideoIntent)
+            sendBroadcast(sendVideoIntent)
+            finish()
+        }
     }
 
     private fun updateGallery() {

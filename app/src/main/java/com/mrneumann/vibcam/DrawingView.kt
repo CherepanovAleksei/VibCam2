@@ -14,7 +14,7 @@ class DrawingView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     var paint = Paint()
 
     init {
-        paint.color = Color.RED
+        paint.color = Color.GREEN
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = (2).toFloat()
         haveTouch = false
