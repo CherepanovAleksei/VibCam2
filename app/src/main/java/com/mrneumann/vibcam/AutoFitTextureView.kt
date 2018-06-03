@@ -2,11 +2,12 @@ package com.mrneumann.vibcam
 
 
 import android.content.Context
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.AttributeSet
-import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
-import android.widget.Toast
+
 
 /**
  * A [TextureView] that can be adjusted to a specified aspect ratio.
@@ -16,7 +17,12 @@ class AutoFitTextureView @JvmOverloads constructor(
         attrs: AttributeSet? = null,
         defStyle: Int = 0
 ) : TextureView(context, attrs, defStyle) {
-
+    //костыль для нуги
+    override fun setBackgroundDrawable(background: Drawable?) {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.N && background != null) {
+            setBackgroundDrawable(background)
+        }
+    }
     private var ratioWidth = 0
     private var ratioHeight = 0
 
@@ -52,8 +58,4 @@ class AutoFitTextureView @JvmOverloads constructor(
         }
     }
 
-    //this override is important for onTouchListener in MainActivity
-    override fun performClick(): Boolean {
-        return super.performClick()
-    }
 }
